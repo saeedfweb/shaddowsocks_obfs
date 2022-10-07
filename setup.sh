@@ -1,0 +1,93 @@
+#!/bin/bash  -
+#===============================================================================
+#
+#          FILE: setup.sh
+#
+#         USAGE: ./setup.sh
+#
+#   DESCRIPTION: 
+#
+#       OPTIONS: ---
+#  REQUIREMENTS: ---
+#          BUGS: ---
+#         NOTES: ---
+#        AUTHOR: Morteza Bashsiz (), morteza.bashsiz@gmail.com
+#  ORGANIZATION: 
+#       CREATED: 10/05/2022 10:25:37 PM
+#      REVISION:  ---
+#===============================================================================
+
+set -o nounset                                  # Treat unset variables as an error
+
+_DISTRO=""
+_PKGMGR=""
+
+_HostIP=$(awk '/32 host/ { print f } {f=$2}' <<< "$(</proc/net/fib_trie)" | grep -v 127.0.0.1 | sort -n | uniq)
+_internalIP=$(grep "^internalIP" config | awk -F = '{print $2}')
+_internalPort=$(grep "^internalPort" config | awk -F = '{print $2}')
+_externalIP=$(grep "^externalIP" config | awk -F = '{print $2}')
+_externalPort=$(grep "^externalPort" config | awk -F = '{print $2}')
+
+_isInternal=$(echo "$_HostIP" | grep "$_internalIP")
+_isExternal=$(echo "$_HostIP" | grep "$_externalIP")
+
+
+if [[ "$_isExternal" ]]
+then
+	_UNAME=$(grep "^NAME=" /etc/os-release)
+	_pass=$(< /dev/urandom tr -dc A-Z-a-z-0-9 | head -c"${1:-16}";echo;)
+	
+	if [[ "$_UNAME" == *"Debian"*  ]]
+	then
+	  _DISTRO="DEBIAN"
+	  _PKGMGR="apt-get"
+	elif [[ "$_UNAME" == *"Ubuntu"*  ]]
+	then
+	  _DISTRO="UBUNTU"
+	  _PKGMGR="apt-get"
+	else
+	    echo "Linux distro does not support"
+	    exit 0
+	fi 
+
+  case $_DISTRO in
+    DEBIAN|UBUNTU)
+        "$_PKGMGR" update
+        "$_PKGMGR" install shadowsocks-libev simple-obfs
+      ;;
+    *)
+      echo "Linux distro does not support"
+      exit 0
+      ;;
+  esac
+
+	echo "{
+	    \"server\":\"$_externalIP\",
+	    \"server_port\":$_externalPort,
+	    \"local_port\":1080,
+	    \"password\":\"$_pass\",
+	    \"timeout\":300,
+	    \"method\":\"chacha20-ietf-poly1305\",
+	    \"workers\":8,
+	    \"plugin\":\"obfs-server\",
+	    \"plugin_opts\": \"obfs=http;obfs-host=www.google.com\",
+	    \"fast_open\":true,
+	    \"reuse_port\":true
+	}
+	" > /etc/shadowsocks-libev/config.json
+	systemctl restart shadowsocks-libev.service
+	iptables -D INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT
+	iptables -I INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT
+
+elif [[ "$_isInternal" ]]
+then
+	iptables -t filter -D FORWARD -s "$_externalIP" -j ACCEPT
+	iptables -t filter -D FORWARD -d "$_externalIP" -j ACCEPT
+  iptables -t nat -D POSTROUTING -j MASQUERADE
+	iptables -t nat -D PREROUTING -p tcp -d "$_internalIP" --dport "$_internalPort" -j DNAT --to-destination "$_externalIP":"$_externalPort"
+	
+	iptables -t filter -I FORWARD -s "$_externalIP" -j ACCEPT
+	iptables -t filter -I FORWARD -d "$_externalIP" -j ACCEPT
+  iptables -t nat -I POSTROUTING -j MASQUERADE
+	iptables -t nat -I PREROUTING -p tcp -d "$_internalIP" --dport "$_internalPort" -j DNAT --to-destination "$_externalIP":"$_externalPort"
+fi
