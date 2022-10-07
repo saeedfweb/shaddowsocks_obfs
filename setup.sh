@@ -76,18 +76,20 @@ then
 	}
 	" > /etc/shadowsocks-libev/config.json
 	systemctl restart shadowsocks-libev.service
-	iptables -D INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT
-	iptables -I INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT
+	iptables -t filter -D INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT
+	iptables -t filter -I INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT
 
 elif [[ "$_isInternal" ]]
 then
 	echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.d/shaddowsocks_obfs.conf
 	sysctl -w net.ipv4.ip_forward=1
+	iptables -t filter -D INPUT -p tcp -d "$_internalIP" --dport "$_internalPort" -j ACCEPT
 	iptables -t filter -D FORWARD -s "$_externalIP" -j ACCEPT
 	iptables -t filter -D FORWARD -d "$_externalIP" -j ACCEPT
   iptables -t nat -D POSTROUTING -j MASQUERADE
 	iptables -t nat -D PREROUTING -p tcp -d "$_internalIP" --dport "$_internalPort" -j DNAT --to-destination "$_externalIP":"$_externalPort"
 	
+	iptables -t filter -I INPUT -p tcp -d "$_internalIP" --dport "$_internalPort" -j ACCEPT
 	iptables -t filter -I FORWARD -s "$_externalIP" -j ACCEPT
 	iptables -t filter -I FORWARD -d "$_externalIP" -j ACCEPT
   iptables -t nat -I POSTROUTING -j MASQUERADE
