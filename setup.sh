@@ -81,6 +81,8 @@ then
 
 elif [[ "$_isInternal" ]]
 then
+	echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.d/shaddowsocks_obfs.conf
+	sysctl -w net.ipv4.ip_forward=1
 	iptables -t filter -D FORWARD -s "$_externalIP" -j ACCEPT
 	iptables -t filter -D FORWARD -d "$_externalIP" -j ACCEPT
   iptables -t nat -D POSTROUTING -j MASQUERADE
