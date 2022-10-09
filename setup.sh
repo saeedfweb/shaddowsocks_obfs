@@ -5,10 +5,10 @@
 #
 #         USAGE: ./setup.sh
 #
-#   DESCRIPTION: 
+#   DESCRIPTION: This script will install and configure shadowsocks on internal and external host
 #
 #       OPTIONS: ---
-#  REQUIREMENTS: ---
+#  REQUIREMENTS: Debian or Ubuntu, Bash
 #          BUGS: ---
 #         NOTES: ---
 #        AUTHOR: Morteza Bashsiz (), morteza.bashsiz@gmail.com
@@ -30,7 +30,6 @@ _externalPort=$(grep "^externalPort" config | awk -F = '{print $2}')
 
 _isInternal=$(echo "$_HostIP" | grep "$_internalIP")
 _isExternal=$(echo "$_HostIP" | grep "$_externalIP")
-
 
 if [[ "$_isExternal" ]]
 then
@@ -76,18 +75,19 @@ then
 	}
 	" > /etc/shadowsocks-libev/config.json
 	systemctl restart shadowsocks-libev.service
-	iptables -t filter -D INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT
+	iptables -t filter -D INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT 2>/dev/null
 	iptables -t filter -I INPUT -p tcp -d "$_externalIP" --dport "$_externalPort" -s "$_internalIP" -j ACCEPT
-
+	echo "Done"
+	echo "Please get your config from /etc/shadowsocks-libev/config.json"
 elif [[ "$_isInternal" ]]
 then
 	echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.d/shaddowsocks_obfs.conf
 	sysctl -w net.ipv4.ip_forward=1
-	iptables -t filter -D INPUT -p tcp -d "$_internalIP" --dport "$_internalPort" -j ACCEPT
-	iptables -t filter -D FORWARD -s "$_externalIP" -j ACCEPT
-	iptables -t filter -D FORWARD -d "$_externalIP" -j ACCEPT
-  iptables -t nat -D POSTROUTING -j MASQUERADE
-	iptables -t nat -D PREROUTING -p tcp -d "$_internalIP" --dport "$_internalPort" -j DNAT --to-destination "$_externalIP":"$_externalPort"
+	iptables -t filter -D INPUT -p tcp -d "$_internalIP" --dport "$_internalPort" -j ACCEPT 2>/dev/null
+	iptables -t filter -D FORWARD -s "$_externalIP" -j ACCEPT 2>/dev/null
+	iptables -t filter -D FORWARD -d "$_externalIP" -j ACCEPT 2>/dev/null
+  iptables -t nat -D POSTROUTING -j MASQUERADE 2>/dev/null
+	iptables -t nat -D PREROUTING -p tcp -d "$_internalIP" --dport "$_internalPort" -j DNAT --to-destination "$_externalIP":"$_externalPort" 2>/dev/null
 	
 	iptables -t filter -I INPUT -p tcp -d "$_internalIP" --dport "$_internalPort" -j ACCEPT
 	iptables -t filter -I FORWARD -s "$_externalIP" -j ACCEPT
